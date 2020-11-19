@@ -1,0 +1,738 @@
+
+
+
+
+
+----lien de la documentation---
+
+https://docs.ceph.com/en/latest/start/intro/
+https://github.com/ceph/ceph-ansible
+https://docs.ceph.com/projects/ceph-ansible/en/latest/
+
+Pour le HA il faut:
+-3 daemons "mons"
+-3 daemons "osds"
+-2 daemons "mgrs"
+-1 daemons "mdss"
+
+
+
+Que vous souhaitiez fournir des services Ceph Object Storage et / ou Ceph Block Device aux 
+plates-formes cloud , déployer un système de fichiers Ceph ou utiliser Ceph dans un autre but, 
+tous les déploiements Ceph Storage Cluster commencent par configurer chaque Ceph Node , votre réseau
+et le Ceph Cluster de stockage. Un cluster de stockage Ceph nécessite au moins un moniteur Ceph, 
+Ceph Manager et Ceph OSD (Object Storage Daemon). Le serveur de métadonnées Ceph est également 
+requis lors de l'exécution des clients Ceph File System.
+
+
+
+                     OSDs         Monitors       Managers        MDSs
+
+
+
+*Moniteurs : Un moniteur Ceph ( ceph-mon) maintient les cartes de l'état du cluster, y compris la 
+carte du moniteur, la carte du gestionnaire, la carte OSD, la carte MDS et la carte CRUSH. 
+Ces cartes sont des états de cluster critiques requis pour que les démons Ceph se coordonnent les 
+uns avec les autres. Les moniteurs sont également responsables de la gestion de l'authentification 
+entre les démons et les clients. Au moins trois moniteurs sont normalement requis pour la redondance
+et la haute disponibilité.
+
+
+*Gestionnaires : un démon Ceph Manager ( ceph-mgr) est responsable du suivi des métriques d'exécution
+ et de l'état actuel du cluster Ceph, y compris l'utilisation du stockage, les métriques de 
+performances actuelles et la charge du système. Les démons Ceph Manager hébergent également des 
+modules basés sur python pour gérer et exposer les informations du cluster Ceph, y compris un 
+tableau de bord Ceph basé sur le Web et une API REST . Au moins deux gestionnaires sont normalement 
+requis pour la haute disponibilité.
+
+
+*OSD Ceph : Un Ceph OSD (démon de stockage d'objets ceph-osd) stocke les données, gère la réplication
+, la récupération, le rééquilibrage des données et fournit des informations de surveillance aux 
+moniteurs et aux gestionnaires Ceph en vérifiant les autres démons Ceph OSD pour un battement de 
+cœur. Au moins 3 OSD Ceph sont normalement requis pour la redondance et la haute disponibilité.
+
+
+*MDS : Un serveur de métadonnées Ceph (MDS ceph-mds) stocke les métadonnées pour le compte du 
+système de fichiers Ceph (c'est-à-dire que les périphériques Ceph Block et Ceph Object Storage 
+n'utilisent pas MDS). Ceph serveurs de métadonnées permettent aux utilisateurs du système POSIX de 
+fichiers pour exécuter des commandes de base (comme ls, find, etc.) sans imposer un fardeau énorme 
+sur le cluster de stockage CEPH.
+
+
+
+Ceph stocke les données sous forme d'objets dans des pools de stockage logiques. À l'aide de 
+l' algorithme CRUSH , Ceph calcule quel groupe de placement doit contenir l'objet et calcule en 
+outre quel démon Ceph OSD doit stocker le groupe de placement. L'algorithme CRUSH permet au cluster 
+de stockage Ceph de mettre à l'échelle, de rééquilibrer et de récupérer dynamiquement
+
+
+
+
+
+----Networking address----
+
+93.123.35.0/24 
+10.17.87.0/24
+
+----changer les noms de chaque node (ceph, node-1, node-2)  ------
+
+root@ceph:sudo hostnamectl
+
+root@ceph:sudo hostnamectl set-hostname node-1
+
+root@node-1:sudo vi /etc/cloud/cloud.cfg
+# This will cause the set+update hostname module to not operate (if true)
+preserve_hostname: true
+
+root@ceph:sudo hostnamectl
+
+
+root@ceph:~# vi /etc/hosts  
+
+93.123.35.4   ceph
+93.123.35.5   node-1
+93.123.35.6   node-2
+
+
+
+-----modifier les adress ip---
+
+root@ceph:/opt/ceph-ansible# vi /etc/netplan/50-cloud-init.yaml
+
+network:
+    ethernets:
+        enp0s3:
+            addresses: [93.123.35.4/24]
+            gateway4: 93.123.35.1
+            nameservers:
+                addresses: [93.123.35.1]
+            dhcp4: no
+
+        enp0s8:
+            addresses: [10.17.87.4/24]
+            dhcp4: no
+
+        enp0s9:
+            dhcp4: no
+
+    version: 2
+
+
+root@ceph:~# ip link set enp0s3 down    (ou 'up')
+
+
+root@ceph:~# apt-get install git -y
+
+root@ceph:~# cd /opt/
+
+root@ceph:/opt# git clone https://github.com/ceph/ceph-ansible.git
+
+Cloning into 'ceph-ansible'...
+remote: Enumerating objects: 54063, done.
+remote: Total 54063 (delta 0), reused 0 (delta 0), pack-reused 54063
+Receiving objects: 100% (54063/54063), 9.99 MiB | 3.28 MiB/s, done.
+Resolving deltas: 100% (37410/37410), done.
+
+
+root@ceph:/opt# ls
+ceph-ansible
+
+root@ceph:/opt# cd ceph-ansible/
+
+root@ceph:/opt/ceph-ansible# ls
+ansible.cfg           generate_group_vars_sample.sh  profiles                site-container.yml.sample  tox-filestore_to_bluestore.ini
+ceph-ansible.spec.in  group_vars                     raw_install_python.yml  site.yml.sample            tox.ini
+contrib               infrastructure-playbooks       README-MULTISITE.md     tests                      tox-podman.ini
+CONTRIBUTING.md       library                        README.rst              test.yml                   tox-shrink_osd.ini
+dashboard.yml         LICENSE                        requirements.txt        tox-cephadm.ini            tox-update.ini
+docs                  Makefile                       rhcs_edits.txt          tox-docker2podman.ini      Vagrantfile
+dummy-ansible-hosts   plugins                        roles                   tox-external_clients.ini   vagrant_variables.yml.sample
+
+
+root@ceph:/opt/ceph-ansible# git checkout stable-5.0
+
+root@ceph:/opt/ceph-ansible# git pull
+
+
+root@ceph:/opt/ceph-ansible# sudo add-apt-repository ppa:ansible/ansible
+
+
+root@ceph:/opt/ceph-ansible# sudo apt update
+
+
+root@ceph:/opt/ceph-ansible# sudo apt install ansible -y
+
+
+root@ceph/opt/ceph-ansible# ssh-keygen -t rsa -b 4096
+
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa):
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /root/.ssh/id_rsa.
+Your public key has been saved in /root/.ssh/id_rsa.pub.
+The key fingerprint is:
+SHA256:sIPdGGdDW9oWXzwX+3JBorGUKqxMfUXkcRRwhSlete4 root@node-1
+The key's randomart image is:
++---[RSA 4096]----+
+|        . =B+BB=.|
+|       . =o*B== +|
+|      = * *++  * |
+|     + % = .  . o|
+|    + * S     ..o|
+|     o .      .o |
+|               E |
+|                 |
+|                 |
++----[SHA256]-----+
+
+
+
+root@ceph:/opt/ceph-ansible# ssh-copy-id node-2            (à faire sur le node-1 également)
+
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/root/.ssh/id_rsa.pub"
+The authenticity of host 'node-2 (93.123.35.5)' can't be established.
+ECDSA key fingerprint is SHA256:62gZaYvS+hIWhdCds8bBRzYBpJyLwxm+KDQCHgFkvGM.
+Are you sure you want to continue connecting (yes/no)? yes
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+root@node-2's password:
+
+Number of key(s) added: 1
+
+Now try logging into the machine, with:   "ssh 'node-2'"
+and check to make sure that only the key(s) you wanted were added.
+
+
+-------Test de connection à node-2 ( il faut le faire sur le node-1 également)-----
+
+root@ceph:/opt/ceph-ansible# ssh node-2
+
+Welcome to Ubuntu 18.04 LTS (GNU/Linux 4.15.0-122-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+  System information as of Thu Oct 22 18:48:02 UTC 2020
+
+  System load:  0.01               Processes:             106
+  Usage of /:   12.8% of 48.96GB   Users logged in:       1
+  Memory usage: 9%                 IP address for enp0s3: 93.123.35.5
+  Swap usage:   0%                 IP address for enp0s8: 10.17.87.5
+
+
+275 packages can be updated.
+173 updates are security updates.
+
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+root@node-2:~#
+root@node-2:~# logout
+Connection to node-2 closed.
+
+
+---------Modifier l'inventaire-------
+
+
+root@ceph:/opt/ceph-ansible# vi /etc/ansible/hosts
+
+[mons]
+node-[1:2]
+
+[osds]
+node-[1:2]
+
+[mgrs]
+ceph ansible_connection=local
+
+[grafana-server]
+ceph ansible_connection=local
+
+
+root@ceph:/opt/ceph-ansible# cp site.yml.sample site.yml
+
+root@ceph:/opt/ceph-ansible# cd group_vars/
+
+
+root@ceph:/opt/ceph-ansible/group_vars# ll
+total 128
+drwxr-xr-x  2 root root  4096 Oct 22 18:24 ./
+drwxr-xr-x 13 root root  4096 Oct 22 18:54 ../
+-rw-r--r--  1 root root 28730 Oct 22 18:24 all.yml.sample
+-rw-r--r--  1 root root  1798 Oct 22 18:23 clients.yml.sample
+-rw-r--r--  1 root root  1612 Oct 22 18:23 iscsigws.yml.sample
+-rw-r--r--  1 root root  1618 Oct 22 18:23 mdss.yml.sample
+-rw-r--r--  1 root root  1787 Oct 22 18:23 mgrs.yml.sample
+-rw-r--r--  1 root root  1995 Oct 22 18:23 mons.yml.sample
+-rw-r--r--  1 root root  4551 Oct 22 18:24 nfss.yml.sample
+-rw-r--r--  1 root root  6042 Oct 22 18:23 osds.yml.sample
+-rw-r--r--  1 root root  2288 Oct 22 18:23 rbdmirrors.yml.sample
+-rw-r--r--  1 root root   553 Oct 22 18:23 realm.yml.sample
+-rw-r--r--  1 root root   738 Oct 22 18:23 rgwloadbalancers.yml.sample
+-rw-r--r--  1 root root  3699 Oct 22 18:23 rgws.yml.sample
+-rw-r--r--  1 root root 28733 Oct 22 18:24 rhcs.yml.sample
+-rw-r--r--  1 root root   370 Oct 22 18:23 zone.yml.sample
+
+root@ceph:/opt/ceph-ansible/group_vars# cp all.yml.sample all.yml
+root@ceph:/opt/ceph-ansible/group_vars# cp mons.yml.sample mons.yml
+root@ceph:/opt/ceph-ansible/group_vars# cp mgrs.yml.sample mgrs.yml
+
+
+
+----------Configuration de CEPH ---------------
+
+root@ceph:/opt/ceph-ansible/group_vars# vi all.yml        (On surcharge les variables pour 
+                                                            l'adapter à notre environnement) 
+
+
+L121 ceph_origin: repository              (Modifier la ligne 121 en mettant "repository" pour dire
+                                           que notre depôt distant de ceph est "repository")
+ 
+L128 ceph_repository: community           (on dit ici qu'on utilise le repository "community")
+
+L144 ceph_stable_release: octopus         (pour dire qu'on utilise la release "octopus" )
+
+L311 monitor_interface: enp0s3            (pour dire l'interface monitor est "enp0s3")
+
+L349 journal_size: 5120                    (rechercher "journal" et decommentez cette ligne)
+
+
+L353 cluster_network: 10.17.87.0/24         (Ajouter une nouvelle ligne en mettant 
+                                             cluster_network: 10.17.87.0/24  [le cluster represente
+                                             le réseau OSD qui correspond en réalité au disque] )
+
+L645 dashboard_enabled: True                (decommentez cette ligne pour autorisez le dashboard)
+
+L652 dashboard_admin_user: admin                      (pour definir le login du dashboard)
+
+L655 dashboard_admin_password: Kn84cftzHPft87uX       (pour définir le password du dashboard)
+
+L667 grafana_admin_user: admin                        (pour définir le login de grafana)
+
+L669 grafana_admin_password: Kn84cftzHPft87uX         (pour définir le password de grafana)
+
+
+
+root@ceph:~# ssh node-1
+
+
+root@node-1:~# fdisk -l     (pour voir les disque disponible qui serviront de OSD)
+
+Disk /dev/loop0: 86.6 MiB, 90759168 bytes, 177264 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+
+
+
+
+Disk /dev/sda: 40 GiB, 42949672960 bytes, 83886080 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: gpt
+Disk identifier: DFED5625-EF1E-4C69-B149-000011AEBEDE
+
+Device     Start      End  Sectors Size Type
+/dev/sda1   2048     4095     2048   1M BIOS boot
+/dev/sda2   4096 83884031 83879936  40G Linux filesystem
+
+
+Disk /dev/sdb: 40 GiB, 42949672960 bytes, 83886080 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+
+
+
+
+root@ceph:~# ssh node-2
+
+
+root@node-2:~# fdisk -l
+Disk /dev/loop0: 86.6 MiB, 90759168 bytes, 177264 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+
+
+
+
+Disk /dev/sda: 40 GiB, 42949672960 bytes, 83886080 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: gpt
+Disk identifier: DFED5625-EF1E-4C69-B149-000011AEBEDE
+
+Device     Start      End  Sectors Size Type
+/dev/sda1   2048     4095     2048   1M BIOS boot
+/dev/sda2   4096 83884031 83879936  40G Linux filesystem
+
+
+Disk /dev/sdb: 40 GiB, 42949672960 bytes, 83886080 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+
+
+
+
+
+INTERPRETATION:
+Ici on voit qu'on a un disk qui est disponible "/dev/sdb" et qui est de 40GiB sur le NODE-1 et NODE-2
+
+
+
+root@ceph:/opt/ceph-ansible/group_vars# ll
+total 168
+drwxr-xr-x  2 root root  4096 Oct 23 15:09 ./
+drwxr-xr-x 13 root root  4096 Oct 23 14:57 ../
+-rw-r--r--  1 root root 28783 Oct 23 15:07 all.yml
+-rw-r--r--  1 root root 28730 Oct 23 12:39 all.yml.sample
+-rw-r--r--  1 root root  1798 Oct 23 12:33 clients.yml.sample
+-rw-r--r--  1 root root  1612 Oct 23 12:33 iscsigws.yml.sample
+-rw-r--r--  1 root root  1618 Oct 23 12:33 mdss.yml.sample
+-rw-r--r--  1 root root  1787 Oct 23 14:58 mgrs.yml
+-rw-r--r--  1 root root  1787 Oct 23 12:33 mgrs.yml.sample
+-rw-r--r--  1 root root  1995 Oct 23 14:58 mons.yml
+-rw-r--r--  1 root root  1995 Oct 23 12:33 mons.yml.sample
+-rw-r--r--  1 root root  4551 Oct 23 12:39 nfss.yml.sample
+-rw-r--r--  1 root root  6042 Oct 23 12:33 osds.yml.sample
+-rw-r--r--  1 root root  2288 Oct 23 12:33 rbdmirrors.yml.sample
+-rw-r--r--  1 root root   553 Oct 23 12:33 realm.yml.sample
+-rw-r--r--  1 root root   738 Oct 23 12:33 rgwloadbalancers.yml.sample
+-rw-r--r--  1 root root  3699 Oct 23 12:33 rgws.yml.sample
+-rw-r--r--  1 root root 28733 Oct 23 12:39 rhcs.yml.sample
+-rw-r--r--  1 root root   370 Oct 23 12:33 zone.yml.sample
+
+
+root@ceph:/opt/ceph-ansible/group_vars# cp osds.yml.sample osds.yml
+
+root@node-1:/opt/ceph-ansible/group_vars# vi osds.yml
+
+L36 devices:                        (on decommente cette ligne pour dire qu'on declare nos disques)
+L37   - /dev/sdb                    (on définit nos disque physique "/dev/sdb" )
+
+
+L64 osd_auto_discovery: false       (on recherche "osd_auto_discovery" et on le met à "false")
+
+
+
+----------------deploiement de CEPH-----------
+
+root@ceph:/opt/ceph-ansible# apt install python-pip -y
+
+root@ceph:/opt/ceph-ansible# pip install -r requirements.txt
+
+
+root@ceph:/opt/ceph-ansible# ansible --version
+[WARNING]: log file at /root/ansible/ansible.log is not writeable and we cannot create it, aborting
+
+ansible 2.9.14
+  config file = /opt/ceph-ansible/ansible.cfg
+  configured module search path = [u'/opt/ceph-ansible/library']
+  ansible python module location = /usr/lib/python2.7/dist-packages/ansible
+  executable location = /usr/bin/ansible
+  python version = 2.7.17 (default, Sep 30 2020, 13:38:04) [GCC 7.5.0]
+
+
+
+
+root@ceph:/opt/ceph-ansible# ansible-playbook site.yml
+
+
+TASK [ceph-dashboard : print dashboard URL] **************************************************************************************************
+Friday 23 October 2020  15:50:34 +0000 (0:00:01.092)       0:27:20.393 ********
+ok: [ceph] =>
+  msg: The dashboard has been deployed! You can access your dashboard web UI at http://ceph:8443/ as an 'admin' user with 'Kn84cftzHPft87uX' password.
+
+TASK [set ceph dashboard install 'Complete'] *************************************************************************************************
+Friday 23 October 2020  15:50:34 +0000 (0:00:00.107)       0:27:20.501 ********
+ok: [ceph]
+
+
+
+TASK [show ceph status for cluster ceph] *****************************************************************************************************
+Friday 23 October 2020  15:50:57 +0000 (0:00:02.389)       0:27:43.129 ********
+ok: [node-1 -> node-1] =>
+  msg:
+  - '  cluster:'
+  - '    id:     f4e1b87c-8d7a-46c7-b752-b2e0f76a4017'
+  - '    health: HEALTH_WARN'
+  - '            Degraded data redundancy: 1 pg undersized'
+  - '            OSD count 2 < osd_pool_default_size 3'
+  - ' '
+  - '  services:'
+  - '    mon: 2 daemons, quorum node-1,node-2 (age 7m)'
+  - '    mgr: ceph(active, since 6s)'
+  - '    osd: 2 osds: 2 up (since 4m), 2 in (since 4m)'
+  - ' '
+  - '  data:'
+  - '    pools:   1 pools, 1 pgs'
+  - '    objects: 0 objects, 0 B'
+  - '    usage:   2.0 GiB used, 78 GiB / 80 GiB avail'
+  - '    pgs:     1 active+undersized'
+  - ' '
+
+
+
+PLAY RECAP ***********************************************************************************************************************************
+ceph                       : ok=205  changed=45   unreachable=0    failed=0    skipped=422  rescued=0    ignored=0
+node-1                     : ok=223  changed=33   unreachable=0    failed=0    skipped=407  rescued=0    ignored=0
+node-2                     : ok=181  changed=29   unreachable=0    failed=0    skipped=372  rescued=0    ignored=0
+
+INSTALLER STATUS *****************************************************************************************************************************
+Install Ceph Monitor           : Complete (0:01:07)
+Install Ceph Manager           : Complete (0:00:46)
+Install Ceph OSD               : Complete (0:01:12)
+Install Ceph Dashboard         : Complete (0:00:50)
+Install Ceph Grafana           : Complete (0:01:29)
+Install Ceph Node Exporter     : Complete (0:01:56)
+
+Friday 23 October 2020  15:50:57 +0000 (0:00:00.656)       0:27:43.785 ********
+===============================================================================
+ceph-common : install ceph for debian ---------------------------------------------------------------------------------------------- 1017.96s
+ceph-infra : update cache for Debian based OSs --------------------------------------------------------------------------------------- 82.29s
+ceph-grafana : download ceph grafana dashboards -------------------------------------------------------------------------------------- 31.95s
+ceph-container-engine : start container service -------------------------------------------------------------------------------------- 30.73s
+ceph-container-engine : install container packages ----------------------------------------------------------------------------------- 27.20s
+ceph-node-exporter : start the node_exporter service --------------------------------------------------------------------------------- 25.20s
+ceph-infra : install chrony ---------------------------------------------------------------------------------------------------------- 25.03s
+ceph-mon : waiting for the monitor(s) to form the quorum... -------------------------------------------------------------------------- 23.05s
+ceph-mgr : wait for all mgr to be up ------------------------------------------------------------------------------------------------- 19.48s
+ceph-dashboard : create dashboard admin user ----------------------------------------------------------------------------------------- 17.33s
+ceph-osd : use ceph-volume lvm batch to create bluestore osds ------------------------------------------------------------------------ 17.25s
+ceph-grafana : wait for grafana to start --------------------------------------------------------------------------------------------- 16.25s
+ceph-common : configure debian ceph stable community repository ---------------------------------------------------------------------- 12.82s
+ceph-osd : wait for all osd to be up ------------------------------------------------------------------------------------------------- 11.88s
+ceph-common : install dependencies for apt modules ------------------------------------------------------------------------------------ 9.96s
+ceph-grafana : enable and start grafana ----------------------------------------------------------------------------------------------- 8.65s
+ceph-config : look up for ceph-volume rejected devices -------------------------------------------------------------------------------- 8.07s
+ceph-container-engine : allow apt to use a repository over https (debian) ------------------------------------------------------------- 6.61s
+gather and delegate facts ------------------------------------------------------------------------------------------------------------- 5.02s
+ceph-prometheus : service handler ----------------------------------------------------------------------------------------------------- 4.88s
+
+
+
+root@ceph:/opt/ceph-ansible# netstat -laputen
+
+Active Internet connections (servers and established)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       User       Inode      PID/Program name
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      101        17441      853/systemd-resolve
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      0          31080      4494/sshd
+tcp        0      0 10.17.87.4:3000         0.0.0.0:*               LISTEN      472        107747     32397/grafana-serve
+tcp        0      0 127.0.0.1:6010          0.0.0.0:*               LISTEN      1000       22158      1601/sshd: devops@p
+tcp        0      0 10.17.87.4:8443         0.0.0.0:*               LISTEN      64045      110430     20466/ceph-mgr
+tcp        0      0 127.0.0.1:6011          0.0.0.0:*               LISTEN      1000       23119      1750/sshd: devops@p
+tcp        0      0 127.0.0.1:6012          0.0.0.0:*               LISTEN      1000       23394      1899/sshd: devops@p
+tcp        0      0 127.0.0.1:44801         0.0.0.0:*               LISTEN      0          53582      15992/containerd
+tcp        0      0 10.17.87.4:9092         0.0.0.0:*               LISTEN      65534      81518      25034/prometheus
+tcp        0      0 10.17.87.4:9093         0.0.0.0:*               LISTEN      65534      81972      24902/alertmanager
+tcp        0      0 10.17.87.4:9094         0.0.0.0:*               LISTEN      65534      81278      24902/alertmanager
+tcp        0      0 93.123.35.4:6800        0.0.0.0:*               LISTEN      64045      110419     20466/ceph-mgr
+tcp        0      0 93.123.35.4:6801        0.0.0.0:*               LISTEN      64045      110421     20466/ceph-mgr
+tcp        0      0 93.123.35.4:6800        93.123.35.5:54668       ESTABLISHED 64045      113214     20466/ceph-mgr
+tcp        0      0 93.123.35.4:39046       93.123.35.4:9100        ESTABLISHED 65534      82433      25034/prometheus
+tcp        0      0 93.123.35.4:45182       93.123.35.6:3300        ESTABLISHED 64045      110423     20466/ceph-mgr
+tcp        0      0 93.123.35.4:22          93.123.35.2:50152       ESTABLISHED 0          23125      1806/sshd: devops [
+tcp        0      0 93.123.35.4:22          93.123.35.2:50149       ESTABLISHED 0          22178      1655/sshd: devops [
+tcp        0      0 93.123.35.4:52256       93.123.35.5:3300        ESTABLISHED 64045      111202     20466/ceph-mgr
+tcp        0      0 93.123.35.4:6800        93.123.35.5:54486       ESTABLISHED 64045      110490     20466/ceph-mgr
+tcp        0      0 93.123.35.4:6800        93.123.35.6:44662       ESTABLISHED 64045      112124     20466/ceph-mgr
+tcp        0      0 93.123.35.4:60972       93.123.35.6:22          ESTABLISHED 0          32153      5003/ssh
+tcp        0     48 93.123.35.4:22          93.123.35.2:50147       ESTABLISHED 0          21911      1497/sshd: devops [
+tcp        0      0 93.123.35.4:6800        93.123.35.6:44660       ESTABLISHED 64045      110510     20466/ceph-mgr
+tcp        0      0 10.17.87.4:49130        10.17.87.4:9093         TIME_WAIT   0          0          -
+tcp        0      0 93.123.35.4:22          93.123.35.2:50148       ESTABLISHED 0          21937      1508/sshd: devops [
+tcp        0      0 93.123.35.4:6800        93.123.35.4:56118       ESTABLISHED 64045      113217     20466/ceph-mgr
+tcp        0      0 93.123.35.4:44100       93.123.35.4:9283        ESTABLISHED 65534      112407     25034/prometheus
+tcp        0      0 93.123.35.4:51338       93.123.35.5:9100        ESTABLISHED 65534      82496      25034/prometheus
+tcp        0      0 93.123.35.4:22          93.123.35.2:50151       ESTABLISHED 0          22390      1804/sshd: devops [
+tcp        0      0 93.123.35.4:6800        93.123.35.4:56124       ESTABLISHED 64045      112127     20466/ceph-mgr
+tcp        0      0 93.123.35.4:56124       93.123.35.4:6800        ESTABLISHED 64045      113223     20466/ceph-mgr
+tcp        0      0 93.123.35.4:6800        93.123.35.4:56120       ESTABLISHED 64045      113220     20466/ceph-mgr
+tcp        0      0 10.17.87.4:41364        10.17.87.4:9092         ESTABLISHED 65534      112403     25034/prometheus
+tcp        0      0 93.123.35.4:22          93.123.35.2:50150       ESTABLISHED 0          22186      1671/sshd: devops [
+tcp        0      0 93.123.35.4:55180       93.123.35.6:9100        ESTABLISHED 65534      82486      25034/prometheus
+tcp        0      0 10.17.87.4:9092         10.17.87.4:41364        ESTABLISHED 65534      113678     25034/prometheus
+tcp        0      0 93.123.35.4:56120       93.123.35.4:6800        ESTABLISHED 64045      112121     20466/ceph-mgr
+tcp        0      0 93.123.35.4:56118       93.123.35.4:6800        ESTABLISHED 64045      112120     20466/ceph-mgr
+tcp        0      0 93.123.35.4:52238       93.123.35.5:3300        ESTABLISHED 64045      110418     20466/ceph-mgr
+tcp        0      0 93.123.35.4:47332       93.123.35.5:22          ESTABLISHED 0          32090      4988/ssh
+tcp        0      0 10.17.87.4:41136        10.17.87.4:9092         TIME_WAIT   0          0          -
+tcp6       0      0 :::22                   :::*                    LISTEN      0          31093      4494/sshd
+tcp6       0      0 ::1:6010                :::*                    LISTEN      1000       22157      1601/sshd: devops@p
+tcp6       0      0 ::1:6011                :::*                    LISTEN      1000       23118      1750/sshd: devops@p
+tcp6       0      0 ::1:6012                :::*                    LISTEN      1000       23393      1899/sshd: devops@p
+tcp6       0      0 :::9283                 :::*                    LISTEN      64045      111201     20466/ceph-mgr
+tcp6       0      0 :::9100                 :::*                    LISTEN      65534      74825      23276/node_exporter
+tcp6       0      0 93.123.35.4:9100        93.123.35.4:39046       ESTABLISHED 65534      81671      23276/node_exporter
+tcp6       0      0 93.123.35.4:9283        93.123.35.4:43996       TIME_WAIT   0          0          -
+tcp6       0      0 93.123.35.4:9283        93.123.35.4:44070       TIME_WAIT   0          0          -
+tcp6       0      0 93.123.35.4:9283        93.123.35.4:44100       ESTABLISHED 64045      112408     20466/ceph-mgr
+tcp6       0      0 93.123.35.4:9283        93.123.35.4:44018       TIME_WAIT   0          0          -
+tcp6       0      0 93.123.35.4:9283        93.123.35.4:44050       TIME_WAIT   0          0          -
+udp        0      0 10.17.87.4:9094         0.0.0.0:*                           65534      81279      24902/alertmanager
+udp        0      0 127.0.0.53:53           0.0.0.0:*                           101        17440      853/systemd-resolve
+udp        0      0 127.0.0.1:323           0.0.0.0:*                           0          44402      12750/chronyd
+udp6       0      0 ::1:323                 :::*                                0          44403      12750/chronyd
+
+
+root@ceph:/opt/ceph-ansible# curl http://10.17.87.4:8443
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ceph</title>
+
+  <script>
+    document.write('<base href="' + document.location+ '" />');
+  </script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="styles.58a2c96c3b87bd02e7a7.css"></head>
+<body>
+  <noscript>
+    <div class="noscript container"
+         ng-if="false">
+      <div class="jumbotron alert alert-danger">
+        <h2 i18n>JavaScript required!</h2>
+        <p i18n>A browser with JavaScript enabled is required in order to use this service.</p>
+        <p i18n>When using Internet Explorer, please check your security settings and add this address to your trusted sites.</p>
+      </div>
+    </div>
+  </noscript>
+
+  <cd-root></cd-root>
+<script src="runtime.0907482258dfadeab004.js" defer></script><script src="polyfills.513b02b42d061373f212.js" defer></script><script src="scripts.76632aba1e576c7cc54a.js" defer></script><script src="main.cb10cd7f4a550e7a33c5.js" defer></script></body>
+</html>
+
+
+
+root@ceph:/opt/ceph-ansible# docker ps
+CONTAINER ID        IMAGE                        COMMAND                  CREATED             STATUS              PORTS               NAMES
+db37baf8d5cf        grafana/grafana:5.4.3        "/run.sh"                29 minutes ago      Up 29 minutes                           grafana-server
+c275c81c2780        prom/prometheus:v2.7.2       "/bin/prometheus --c…"   About an hour ago   Up About an hour                        prometheus
+498c8d04ca39        prom/alertmanager:v0.16.2    "/bin/alertmanager -…"   About an hour ago   Up About an hour                        alertmanager
+4d1a256a9ec3        prom/node-exporter:v0.17.0   "/bin/node_exporter …"   About an hour ago   Up About an hour                        node-exporter
+
+
+
+
+root@node-1:~# netstat -laputen
+
+Active Internet connections (servers and established)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       User       Inode      PID/Program name
+tcp        0      0 93.123.35.5:3300        0.0.0.0:*               LISTEN      64045      53789      13612/ceph-mon
+tcp        0      0 93.123.35.5:6789        0.0.0.0:*               LISTEN      64045      53790      13612/ceph-mon
+tcp        0      0 10.17.87.5:6800         0.0.0.0:*               LISTEN      64045      61969      15155/ceph-osd
+tcp        0      0 93.123.35.5:6800        0.0.0.0:*               LISTEN      64045      61966      15155/ceph-osd
+tcp        0      0 10.17.87.5:6801         0.0.0.0:*               LISTEN      64045      61971      15155/ceph-osd
+tcp        0      0 93.123.35.5:6801        0.0.0.0:*               LISTEN      64045      61968      15155/ceph-osd
+tcp        0      0 10.17.87.5:6802         0.0.0.0:*               LISTEN      64045      61981      15155/ceph-osd
+tcp        0      0 93.123.35.5:6802        0.0.0.0:*               LISTEN      64045      61974      15155/ceph-osd
+tcp        0      0 10.17.87.5:6803         0.0.0.0:*               LISTEN      64045      61985      15155/ceph-osd
+tcp        0      0 93.123.35.5:6803        0.0.0.0:*               LISTEN      64045      61978      15155/ceph-osd
+tcp        0      0 127.0.0.1:42259         0.0.0.0:*               LISTEN      0          38122      6486/containerd
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      101        15142      747/systemd-resolve
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      0          34748      4526/sshd
+tcp        0      0 10.17.87.5:37156        10.17.87.6:6800         ESTABLISHED 64045      62606      15155/ceph-osd
+tcp        0      0 10.17.87.5:54242        10.17.87.6:6802         ESTABLISHED 64045      62605      15155/ceph-osd
+tcp        0      0 93.123.35.5:58212       93.123.35.5:3300        ESTABLISHED 64045      61344      15155/ceph-osd
+tcp        0      0 93.123.35.5:6802        93.123.35.6:53808       ESTABLISHED 64045      62607      15155/ceph-osd
+tcp        0      0 93.123.35.5:54668       93.123.35.4:6800        ESTABLISHED 64045      96538      13612/ceph-mon
+tcp        0      0 10.17.87.5:6802         10.17.87.6:40998        ESTABLISHED 64045      62610      15155/ceph-osd
+tcp        0      0 93.123.35.5:3300        93.123.35.5:58212       ESTABLISHED 64045      61345      13612/ceph-mon
+tcp        0      0 93.123.35.5:54486       93.123.35.4:6800        ESTABLISHED 64045      95201      15155/ceph-osd
+tcp        0     36 93.123.35.5:22          93.123.35.4:47332       ESTABLISHED 0          23241      1738/sshd: root@pts
+tcp        0      0 93.123.35.5:3300        93.123.35.4:52238       ESTABLISHED 64045      95138      13612/ceph-mon
+tcp        0      0 93.123.35.5:3300        93.123.35.6:38768       ESTABLISHED 64045      53797      13612/ceph-mon
+tcp        0      0 93.123.35.5:41710       93.123.35.6:6802        ESTABLISHED 64045      62363      15155/ceph-osd
+tcp        0      0 93.123.35.5:3300        93.123.35.4:52256       ESTABLISHED 64045      95150      13612/ceph-mon
+tcp6       0      0 :::9100                 :::*                    LISTEN      65534      69672      16653/node_exporter
+tcp6       0      0 :::22                   :::*                    LISTEN      0          34759      4526/sshd
+tcp6       0      0 93.123.35.5:9100        93.123.35.4:51338       ESTABLISHED 65534      70102      16653/node_exporter
+udp        0      0 127.0.0.53:53           0.0.0.0:*                           101        15141      747/systemd-resolve
+udp        0      0 127.0.0.1:323           0.0.0.0:*                           0          28267      2909/chronyd
+udp6       0      0 ::1:323                 :::*                                0          28268      2909/chronyd
+
+root@node-1:~# docker ps
+CONTAINER ID        IMAGE                        COMMAND                  CREATED             STATUS              PORTS               NAMES
+5844255f39a0        prom/node-exporter:v0.17.0   "/bin/node_exporter …"   About an hour ago   Up About an hour                        node-exporter
+
+
+
+
+root@node-2:~# netstat -laputen
+
+Active Internet connections (servers and established)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       User       Inode      PID/Program name
+tcp        0      0 93.123.35.6:3300        0.0.0.0:*               LISTEN      64045      52104      13578/ceph-mon
+tcp        0      0 93.123.35.6:6789        0.0.0.0:*               LISTEN      64045      52105      13578/ceph-mon
+tcp        0      0 10.17.87.6:6800         0.0.0.0:*               LISTEN      64045      59221      14765/ceph-osd
+tcp        0      0 93.123.35.6:6800        0.0.0.0:*               LISTEN      64045      59218      14765/ceph-osd
+tcp        0      0 10.17.87.6:6801         0.0.0.0:*               LISTEN      64045      59223      14765/ceph-osd
+tcp        0      0 93.123.35.6:6801        0.0.0.0:*               LISTEN      64045      59220      14765/ceph-osd
+tcp        0      0 10.17.87.6:6802         0.0.0.0:*               LISTEN      64045      59233      14765/ceph-osd
+tcp        0      0 93.123.35.6:6802        0.0.0.0:*               LISTEN      64045      59226      14765/ceph-osd
+tcp        0      0 10.17.87.6:6803         0.0.0.0:*               LISTEN      64045      59237      14765/ceph-osd
+tcp        0      0 93.123.35.6:6803        0.0.0.0:*               LISTEN      64045      59230      14765/ceph-osd
+tcp        0      0 127.0.0.1:38515         0.0.0.0:*               LISTEN      0          38420      6474/containerd
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      101        16918      722/systemd-resolve
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      0          34809      4520/sshd
+tcp        0      0 93.123.35.6:44670       93.123.35.4:6800        ESTABLISHED 64045      90810      14765/ceph-osd
+tcp        0      0 93.123.35.6:36578       93.123.35.6:3300        ESTABLISHED 64045      90800      14765/ceph-osd
+tcp        0      0 10.17.87.6:6800         10.17.87.5:37156        ESTABLISHED 64045      60567      14765/ceph-osd
+tcp        0      0 10.17.87.6:6802         10.17.87.5:54242        ESTABLISHED 64045      60564      14765/ceph-osd
+tcp        0      0 93.123.35.6:44668       93.123.35.4:6800        ESTABLISHED 64045      89607      13578/ceph-mon
+tcp        0      0 93.123.35.6:6802        93.123.35.5:41710       ESTABLISHED 64045      61518      14765/ceph-osd
+tcp        0      0 93.123.35.6:3300        93.123.35.4:45182       ESTABLISHED 64045      89342      13578/ceph-mon
+tcp        0      0 93.123.35.6:53808       93.123.35.5:6802        ESTABLISHED 64045      60563      14765/ceph-osd
+tcp        0      0 93.123.35.6:44662       93.123.35.4:6800        TIME_WAIT   0          0          -
+tcp        0      0 93.123.35.6:3300        93.123.35.6:36578       ESTABLISHED 64045      89600      13578/ceph-mon
+tcp        0      0 93.123.35.6:38768       93.123.35.5:3300        ESTABLISHED 64045      52113      13578/ceph-mon
+tcp        0      0 93.123.35.6:44660       93.123.35.4:6800        TIME_WAIT   0          0          -
+tcp        0      0 10.17.87.6:40998        10.17.87.5:6802         ESTABLISHED 64045      60562      14765/ceph-osd
+tcp        0    632 93.123.35.6:22          93.123.35.4:60972       ESTABLISHED 0          24023      1772/sshd: root@pts
+tcp6       0      0 :::9100                 :::*                    LISTEN      65534      67893      16246/node_exporter
+tcp6       0      0 :::22                   :::*                    LISTEN      0          34813      4520/sshd
+tcp6       0      0 93.123.35.6:9100        93.123.35.4:55180       ESTABLISHED 65534      67105      16246/node_exporter
+udp        0      0 127.0.0.1:323           0.0.0.0:*                           0          27345      2914/chronyd
+udp        0      0 127.0.0.53:53           0.0.0.0:*                           101        16917      722/systemd-resolve
+udp6       0      0 ::1:323                 :::*                                0          27346      2914/chronyd
+
+
+root@node-2:~# docker ps
+CONTAINER ID        IMAGE                        COMMAND                  CREATED             STATUS              PORTS               NAMES
+b44666f990f6        prom/node-exporter:v0.17.0   "/bin/node_exporter …"   About an hour ago   Up About an hour                        node-exporter
+
+
+
+
+-------DASHBOARD-CEPH-------
+login: admin
+pwd: comme d'habitude
+
+login: devops
+pwd: devops2021
+
+-------DASHBOARD-GRAFANA----
+login: admin
+pwd: comme d'habitude
+
+login: ops
+pwd: devops2020
+
+login: devops
+pwd: devops2020
+
+
+
+
+
+
+

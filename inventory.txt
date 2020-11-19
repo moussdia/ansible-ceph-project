@@ -1,0 +1,46 @@
+
+#Inventory
+
+[mons]
+node-[1:5]
+
+[osds]
+node-[1:5]
+
+[mgrs]
+ceph ansible_connection=local
+
+[grafana-server]
+ceph ansible_connection=local
+
+
+
+--------------
+
+#Inventory
+
+[mons]
+node-[1:2]
+
+[osds]
+node-[1:2]
+
+[mgrs]
+node-1 ansible_connection=local
+
+[grafana-server]
+node-1 ansible_connection=local
+
+
+
+
+
+
+
+
+
+
+
+
+
+
